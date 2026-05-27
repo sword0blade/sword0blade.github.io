@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>随机点名系统</title>
+    <script src="./js/tailwindcss.js"></script>
+    <script src="./js/xlsx.full.min.js"></script>
+    <style>
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .animate-pulse-custom {
+            animation: pulse 0.3s ease-in-out infinite;
+        }
+        .animate-shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        .name-display {
+            font-size: clamp(2rem, 8vw, 6rem);
+            font-weight: bold;
+        }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(240, 147, 251, 0.4);
+        }
+        .file-drop-zone {
+            border: 3px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .file-drop-zone:hover, .file-drop-zone.dragover {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .list-item {
+            transition: all 0.3s ease;
+        }
+        .list-item:hover {
+            transform: translateX(5px);
+            background: rgba(102, 126, 234, 0.1);
+        }
+        .tab-active {
+            border-bottom: 3px solid #667eea;
+            color: #667eea;
+            font-weight: bold;
+        }
+        .notification {
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500">
+    <div class="container mx-auto px-4 py-8">
+        <div class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white mb-2 drop-shadow-lg">🎯 随机点名系统</h1>
+            <p class="text-white/80 text-lg">公平、公正、公开的随机点名体验</p>
+        </div>
+
+        <div class="glass-effect rounded-3xl shadow-2xl p-6 md:p-8 max-w-6xl mx-auto">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-2 space-y-6">
+                    
+
+
+                    <div class="bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl shadow-lg p-8 text-center">
+                        <div class="mb-6">
+                            <p class="text-white/80 mb-2">当前点名</p>
+                            <div id="nameDisplay" class="name-display text-white bg-white/20 rounded-2xl py-8 px-4 min-h-32 flex items-center justify-center">
+                                等待开始
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4 justify-center mb-6">
+                            <label class="flex items-center bg-white/20 rounded-full px-4 py-2 text-white cursor-pointer">
+                                <input type="radio" name="mode" value="unique" checked class="mr-2" onchange="setMode('unique')">
+                                <span>不可重复</span>
+                            </label>
+                            <label class="flex items-center bg-white/20 rounded-full px-4 py-2 text-white cursor-pointer">
+                                <input type="radio" name="mode" value="repeat" class="mr-2" onchange="setMode('repeat')">
+                                <span>可重复</span>
+                            </label>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4 justify-center">
+                            <button id="startBtn" onclick="startRolling()" class="btn-primary text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg" disabled>
+                                🎲 开始点名
+                            </button>
+                            <button id="resetBtn" onclick="resetNames()" class="btn-secondary text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg" disabled>
+                                🔄 重置
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="stat-card text-white rounded-xl p-4 text-center">
+                            <p class="text-3xl font-bold" id="totalCount">0</p>
+                            <p class="text-sm opacity-80">总人数</p>
+                        </div>
+                        <div class="stat-card text-white rounded-xl p-4 text-center">
+                            <p class="text-3xl font-bold" id="calledCount">0</p>
+                            <p class="text-sm opacity-80">已点名</p>
+                        </div>
+                        <div class="stat-card text-white rounded-xl p-4 text-center">
+                            <p class="text-3xl font-bold" id="remainingCount">0</p>
+                            <p class="text-sm opacity-80">剩余</p>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white rounded-2xl shadow-lg p-6">
+                        <div class="flex gap-4 mb-4 border-b">
+                            <button id="tabFile" class="pb-3 px-2 tab-active" onclick="switchTab('file')">📁 文件导入</button>
+                            <button id="tabInput" class="pb-3 px-2 text-gray-500 hover:text-gray-700" onclick="switchTab('input')">✏️ 手动输入</button>
+                        </div>
+
+                        <div id="fileSection">
+                            <div id="dropZone" class="file-drop-zone rounded-xl p-8 text-center cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                                <svg class="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                <p class="text-gray-600 mb-2">拖放文件到此处或点击选择</p>
+                                <p class="text-gray-400 text-sm">支持 .txt 和 .xlsx / .xls 文件</p>
+                                <input type="file" id="fileInput" class="hidden" accept=".txt,.xlsx,.xls" onchange="handleFileUpload(event)">
+                            </div>
+                            <div id="uploadStatus" class="mt-4 text-center hidden"></div>
+                        </div>
+
+                        <div id="inputSection" class="hidden">
+                            <textarea id="nameInput" class="w-full h-32 border-2 border-gray-200 rounded-xl p-4 focus:border-purple-500 focus:outline-none resize-none" placeholder="请输入姓名，支持逗号、空格或换行分隔&#10;例如：&#10;张三 李四 王五&#10;赵六,钱七,孙八"></textarea>
+                            <button onclick="addNamesFromInput()" class="mt-4 w-full btn-primary text-white py-3 rounded-xl font-semibold">确认添加</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="bg-white rounded-2xl shadow-lg p-6">
+                        <h3 class="text-lg font-bold mb-4 flex items-center">
+                            <span class="mr-2">📋</span>已点名列表
+                        </h3>
+                        <div id="calledList" class="max-h-64 overflow-y-auto space-y-2">
+                            <p class="text-gray-400 text-center py-4">暂无记录</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-lg p-6">
+                        <h3 class="text-lg font-bold mb-4 flex items-center">
+                            <span class="mr-2">👥</span>剩余名单
+                        </h3>
+                        <div id="remainingList" class="max-h-64 overflow-y-auto space-y-2">
+                            <p class="text-gray-400 text-center py-4">请先添加姓名</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl shadow-lg p-6">
+                        <h3 class="text-lg font-bold mb-4 flex items-center">
+                            <span class="mr-2">⚙️</span>设置
+                        </h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-2">滚动速度</label>
+                                <input type="range" id="speedInput" min="20" max="200" value="80" class="w-full">
+                                <p class="text-xs text-gray-400 text-right" id="speedValue">80ms</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-2">显示时长</label>
+                                <input type="range" id="durationInput" min="1000" max="5000" value="2000" class="w-full">
+                                <p class="text-xs text-gray-400 text-right" id="durationValue">2秒</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="fixed top-4 right-4 z-50 hidden">
+        <div class="notification bg-white rounded-xl shadow-2xl p-4 max-w-sm">
+            <p id="notificationText"></p>
+        </div>
+    </div>
+
+    <script>
+        let allNames = [];
+        let remainingNames = [];
+        let calledNames = [];
+        let nameFrequency = {};
+        let isRolling = false;
+        let rollingInterval = null;
+        let currentMode = 'unique';
+        let rollSpeed = 80;
+        let rollDuration = 2000;
+
+        function showNotification(message, type = 'success') {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notificationText');
+            notificationText.textContent = message;
+            notification.classList.remove('hidden');
+            
+            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-yellow-500';
+            notification.querySelector('div').classList.add(bgColor, 'text-white');
+            
+            setTimeout(() => {
+                notification.classList.add('hidden');
+                notification.querySelector('div').classList.remove(bgColor, 'text-white');
+            }, 3000);
+        }
+
+        function switchTab(tab) {
+            const fileSection = document.getElementById('fileSection');
+            const inputSection = document.getElementById('inputSection');
+            const tabFile = document.getElementById('tabFile');
+            const tabInput = document.getElementById('tabInput');
+
+            if (tab === 'file') {
+                fileSection.classList.remove('hidden');
+                inputSection.classList.add('hidden');
+                tabFile.classList.add('tab-active');
+                tabFile.classList.remove('text-gray-500');
+                tabInput.classList.remove('tab-active');
+                tabInput.classList.add('text-gray-500');
+            } else {
+                fileSection.classList.add('hidden');
+                inputSection.classList.remove('hidden');
+                tabInput.classList.add('tab-active');
+                tabInput.classList.remove('text-gray-500');
+                tabFile.classList.remove('tab-active');
+                tabFile.classList.add('text-gray-500');
+            }
+        }
+
+        const dropZone = document.getElementById('dropZone');
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                handleFile(file);
+            }
+        }
+
+        function handleFile(file) {
+            const fileName = file.name.toLowerCase();
+            const uploadStatus = document.getElementById('uploadStatus');
+            uploadStatus.classList.remove('hidden');
+            uploadStatus.innerHTML = '<p class="text-blue-500">⏳ 正在处理文件...</p>';
+
+            if (fileName.endsWith('.txt')) {
+                readTextFile(file);
+            } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+                readExcelFile(file);
+            } else {
+                uploadStatus.innerHTML = '<p class="text-red-500">❌ 不支持的文件格式</p>';
+                showNotification('不支持的文件格式', 'error');
+            }
+        }
+
+        function readTextFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                const names = parseNames(content);
+                addNames(names);
+            };
+            reader.onerror = () => {
+                showNotification('文件读取失败', 'error');
+                document.getElementById('uploadStatus').innerHTML = '<p class="text-red-500">❌ 文件读取失败</p>';
+            };
+            reader.readAsText(file);
+        }
+
+        function readExcelFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    
+                    const names = [];
+                    jsonData.forEach(row => {
+                        row.forEach(cell => {
+                            if (cell && typeof cell === 'string' && cell.trim()) {
+                                names.push(cell.trim());
+                            }
+                        });
+                    });
+                    
+                    addNames(names);
+                } catch (error) {
+                    showNotification('Excel文件解析失败', 'error');
+                    document.getElementById('uploadStatus').innerHTML = '<p class="text-red-500">❌ Excel文件解析失败</p>';
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseNames(content) {
+            const separators = [',', '，', ' ', '\n', '\t', ';', '；'];
+            let text = content;
+            separators.forEach(sep => {
+                text = text.split(sep).join('|');
+            });
+            return text.split('|').map(name => name.trim()).filter(name => name.length > 0);
+        }
+
+        function addNamesFromInput() {
+            const input = document.getElementById('nameInput').value;
+            const names = parseNames(input);
+            if (names.length > 0) {
+                addNames(names);
+                document.getElementById('nameInput').value = '';
+            } else {
+                showNotification('请输入有效的姓名', 'warning');
+            }
+        }
+
+        function addNames(names) {
+            if (names.length === 0) {
+                showNotification('没有找到有效的姓名', 'warning');
+                return;
+            }
+
+            const newNames = names.filter(name => !allNames.includes(name));
+            allNames = [...allNames, ...newNames];
+            remainingNames = [...remainingNames, ...newNames];
+            
+            newNames.forEach(name => {
+                if (!nameFrequency[name]) {
+                    nameFrequency[name] = 0;
+                }
+            });
+
+            updateUI();
+            document.getElementById('uploadStatus').innerHTML = `<p class="text-green-500">✅ 成功添加 ${newNames.length} 个姓名</p>`;
+            showNotification(`成功添加 ${newNames.length} 个姓名`);
+        }
+
+        function setMode(mode) {
+            currentMode = mode;
+        }
+
+        function startRolling() {
+            if (isRolling) return;
+            if (allNames.length === 0) {
+                showNotification('请先添加姓名', 'warning');
+                return;
+            }
+            if (currentMode === 'unique' && remainingNames.length === 0) {
+                showNotification('所有姓名都已被点到，请重置', 'warning');
+                return;
+            }
+
+            isRolling = true;
+            const startBtn = document.getElementById('startBtn');
+            startBtn.textContent = '🎯 点名中...';
+            startBtn.disabled = true;
+
+            const nameDisplay = document.getElementById('nameDisplay');
+            nameDisplay.classList.add('animate-pulse-custom');
+
+            const candidates = currentMode === 'unique' ? remainingNames : allNames;
+            let startTime = Date.now();
+
+            rollingInterval = setInterval(() => {
+                const randomIndex = Math.floor(Math.random() * candidates.length);
+                nameDisplay.textContent = candidates[randomIndex];
+            }, rollSpeed);
+
+            setTimeout(() => {
+                stopRolling();
+            }, rollDuration);
+        }
+
+        function stopRolling() {
+            clearInterval(rollingInterval);
+            
+            const candidates = currentMode === 'unique' ? remainingNames : allNames;
+            const randomIndex = Math.floor(Math.random() * candidates.length);
+            const selectedName = candidates[randomIndex];
+
+            const nameDisplay = document.getElementById('nameDisplay');
+            nameDisplay.textContent = selectedName;
+            nameDisplay.classList.remove('animate-pulse-custom');
+            nameDisplay.classList.add('animate-shake');
+            setTimeout(() => nameDisplay.classList.remove('animate-shake'), 500);
+
+            nameFrequency[selectedName]++;
+
+            if (currentMode === 'unique') {
+                remainingNames.splice(randomIndex, 1);
+                calledNames.push(selectedName);
+            }
+
+            updateUI();
+
+            isRolling = false;
+            const startBtn = document.getElementById('startBtn');
+            startBtn.textContent = '🎲 开始点名';
+            startBtn.disabled = false;
+
+            showNotification(`🎉 恭喜 ${selectedName} 被选中！`);
+        }
+
+        function resetNames() {
+            remainingNames = [...allNames];
+            calledNames = [];
+            updateUI();
+            document.getElementById('nameDisplay').textContent = '等待开始';
+            showNotification('已重置所有名单');
+        }
+
+        function updateUI() {
+            document.getElementById('totalCount').textContent = allNames.length;
+            document.getElementById('calledCount').textContent = calledNames.length;
+            document.getElementById('remainingCount').textContent = remainingNames.length;
+
+            document.getElementById('startBtn').disabled = allNames.length === 0;
+            document.getElementById('resetBtn').disabled = allNames.length === 0;
+
+            const calledList = document.getElementById('calledList');
+            if (calledNames.length > 0) {
+                calledList.innerHTML = calledNames.map((name, index) => `
+                    <div class="list-item p-2 rounded-lg bg-purple-50">
+                        <span class="text-purple-600 font-semibold">${index + 1}.</span> ${name}
+                        <span class="text-xs text-gray-400 ml-2">(${nameFrequency[name]}次)</span>
+                    </div>
+                `).join('');
+            } else {
+                calledList.innerHTML = '<p class="text-gray-400 text-center py-4">暂无记录</p>';
+            }
+
+            const remainingList = document.getElementById('remainingList');
+            if (remainingNames.length > 0) {
+                remainingList.innerHTML = remainingNames.map(name => `
+                    <div class="list-item p-2 rounded-lg bg-green-50">
+                        <span class="text-green-600 font-semibold">•</span> ${name}
+                    </div>
+                `).join('');
+            } else if (allNames.length > 0) {
+                remainingList.innerHTML = '<p class="text-gray-400 text-center py-4">已全部点完</p>';
+            } else {
+                remainingList.innerHTML = '<p class="text-gray-400 text-center py-4">请先添加姓名</p>';
+            }
+        }
+
+        document.getElementById('speedInput').addEventListener('input', (e) => {
+            rollSpeed = parseInt(e.target.value);
+            document.getElementById('speedValue').textContent = rollSpeed + 'ms';
+        });
+
+        document.getElementById('durationInput').addEventListener('input', (e) => {
+            rollDuration = parseInt(e.target.value);
+            document.getElementById('durationValue').textContent = (rollDuration / 1000) + '秒';
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>
